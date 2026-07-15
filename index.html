@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<meta name="theme-color" content="#0f111a" />
+<title>Eye Reset: two-minute screen break</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600&family=Hanken+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#0f111a;
+    --bg-soft:#151824;
+    --ink:#eae7de;
+    --ink-dim:#9a9fb4;
+    --ink-faint:#565b72;
+    --accent:#74b9ad;
+    --accent-soft:#9ad3c8;
+    --accent-deep:#2f5e58;
+    --warm:#cca672;
+    --ring:rgba(116,185,173,.55);
+    --orb:clamp(116px, 40vmin, 250px);
+    --ease:cubic-bezier(.4,0,.2,1);
+  }
+
+  *{box-sizing:border-box; margin:0; padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Hanken Grotesk", system-ui, sans-serif;
+    -webkit-font-smoothing:antialiased;
+    overflow:hidden;
+    overscroll-behavior:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+
+  .app{
+    position:fixed; inset:0;
+    display:flex; flex-direction:column;
+    height:100dvh;
+    padding:
+      max(14px, env(safe-area-inset-top))
+      max(16px, env(safe-area-inset-right))
+      max(16px, env(safe-area-inset-bottom))
+      max(16px, env(safe-area-inset-left));
+    transition:background 1.4s var(--ease);
+  }
+  .app[data-phase="rest"]{ background:#08090e; }
+
+  /* ---- top bar ---- */
+  .top{
+    display:flex; align-items:center; justify-content:space-between;
+    z-index:5;
+  }
+  .brand{
+    font-family:"Sora", sans-serif; font-weight:400;
+    font-size:.82rem; letter-spacing:.32em; text-transform:uppercase;
+    color:var(--ink-dim);
+  }
+  .icon-btn{
+    width:42px; height:42px; border-radius:50%;
+    border:1px solid transparent; background:transparent;
+    color:var(--ink-dim); cursor:pointer;
+    display:grid; place-items:center;
+    transition:color .2s, background .2s;
+  }
+  .icon-btn:hover{ color:var(--ink) }
+  .icon-btn:focus-visible{ outline:2px solid var(--ring); outline-offset:2px }
+  .icon-btn svg{ width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round }
+  .icon-btn .slash{ display:none }
+  .icon-btn.muted{ color:var(--ink-faint) }
+  .icon-btn.muted .slash{ display:inline }
+
+  /* ---- overall 2-minute track ---- */
+  .track{
+    height:2px; width:100%; margin-top:14px; border-radius:2px;
+    background:rgba(255,255,255,.06); overflow:hidden; z-index:5;
+  }
+  .track-fill{
+    height:100%; width:0%;
+    background:linear-gradient(90deg, var(--accent-deep), var(--accent));
+    transition:width .25s linear;
+  }
+
+  /* ---- stage ---- */
+  .stage{
+    position:relative; flex:1;
+    display:grid; place-items:center;
+    min-height:0;
+  }
+
+  /* wrapper carries position (for the follow-the-light path); orb carries size */
+  .orb-wrap{
+    position:absolute; inset:0; z-index:1;
+    display:grid; place-items:center;
+    transition:opacity 1s var(--ease);
+    will-change:transform;
+  }
+  .app[data-state="done"] .orb-wrap{ opacity:0 }
+
+  .glow{
+    position:absolute; width:var(--orb); aspect-ratio:1; border-radius:50%;
+    background:radial-gradient(circle, var(--accent) 0%, transparent 68%);
+    filter:blur(46px); opacity:.30;
+    transition:opacity 1.2s var(--ease), transform 1s var(--ease);
+    pointer-events:none;
+  }
+  .app[data-state="idle"] .glow,
+  .app[data-state="paused"] .glow{ opacity:.18 }
+  .app[data-state="running"][data-phase="distance"] .glow{ opacity:.12 }
+  .app[data-state="running"][data-phase="movement"] .glow{ opacity:.28; transform:scale(.5) }
+  .app[data-state="running"][data-phase="rest"] .glow{ opacity:0 }
+
+  .orb{
+    position:absolute;
+    width:var(--orb); aspect-ratio:1; border-radius:50%;
+    background:
+      radial-gradient(circle at 38% 34%, var(--accent-soft) 0%, var(--accent) 40%, var(--accent-deep) 100%);
+    box-shadow:0 0 60px -6px var(--ring), inset 0 0 40px rgba(255,255,255,.10);
+    transition:opacity 1s var(--ease), transform 1s var(--ease), background 1s var(--ease);
+    will-change:transform, opacity;
+    pointer-events:none;
+  }
+  .app[data-state="idle"] .orb,
+  .app[data-state="paused"] .orb{ animation:breathe 7s var(--ease) infinite; opacity:.5 }
+
+  /* per-phase orb behaviour (running) */
+  .app[data-state="running"][data-phase="ready"]    .orb{ animation:breathe 6s var(--ease) infinite }
+  .app[data-state="running"][data-phase="blink"]    .orb{ animation:blinkpace 3s var(--ease) infinite }
+  .app[data-state="running"][data-phase="distance"] .orb{ animation:recede 30s linear forwards }
+  .app[data-state="running"][data-phase="nearfar"]  .orb{ animation:nearfar 5s var(--ease) infinite }
+  .app[data-state="running"][data-phase="movement"] .orb{ transform:scale(.34) }
+  .app[data-state="running"][data-phase="rest"]     .orb{ opacity:0; transform:scale(.4) }
+
+  /* the follow-the-light path travels near the edges of the stage */
+  .app[data-state="running"][data-phase="movement"] .orb-wrap{ animation:pursuit 20s var(--ease) forwards }
+
+  @keyframes breathe{ 0%,100%{transform:scale(.86)} 50%{transform:scale(1.04)} }
+  @keyframes blinkpace{ 0%,42%{transform:scaleY(1)} 50%{transform:scaleY(.05)} 58%,100%{transform:scaleY(1)} }
+  @keyframes nearfar{ 0%,100%{transform:scale(1.18)} 50%{transform:scale(.46)} }
+  @keyframes recede{ 0%{transform:scale(1)} 18%{transform:scale(.34)} 100%{transform:scale(.34)} }
+  @keyframes pursuit{
+    0%   { transform:translate(0,0) }
+    9%   { transform:translate(0,-34%) }
+    20%  { transform:translate(0,0) }
+    30%  { transform:translate(0,34%) }
+    41%  { transform:translate(0,0) }
+    51%  { transform:translate(-42%,0) }
+    62%  { transform:translate(0,0) }
+    72%  { transform:translate(42%,0) }
+    83%  { transform:translate(0,0) }
+    90%  { transform:translate(30%,-24%) }
+    96%  { transform:translate(-30%,24%) }
+    100% { transform:translate(0,0) }
+  }
+
+  /* ---- running text (top eyebrow + bottom instruction) ---- */
+  .run-top{
+    position:absolute; top:2%; left:0; right:0; text-align:center; z-index:4;
+    opacity:0; transition:opacity .4s var(--ease); pointer-events:none;
+  }
+  .run-bottom{
+    position:absolute; bottom:3%; left:0; right:0; text-align:center; z-index:4;
+    padding:0 24px;
+    opacity:0; transition:opacity .4s var(--ease); pointer-events:none;
+  }
+  .app[data-state="running"] .run-top,
+  .app[data-state="running"] .run-bottom,
+  .app[data-state="paused"] .run-top,
+  .app[data-state="paused"] .run-bottom{ opacity:1 }
+
+  .phase-name{
+    font-family:"Sora", sans-serif; font-weight:400;
+    font-size:.78rem; letter-spacing:.34em; text-transform:uppercase;
+    color:var(--accent-soft);
+  }
+  .time{
+    font-family:"Sora", sans-serif; font-weight:300;
+    font-size:clamp(2.6rem, 12vw, 4rem); line-height:1.1;
+    color:var(--ink); font-variant-numeric:tabular-nums;
+    margin-top:2px;
+  }
+  .instr{
+    font-size:clamp(1.02rem, 4.4vw, 1.28rem); font-weight:400; line-height:1.45;
+    color:var(--ink); max-width:22ch; margin:0 auto;
+    text-wrap:balance;
+  }
+  .note{
+    font-size:.82rem; font-weight:400; line-height:1.4;
+    color:var(--ink-dim); max-width:30ch; margin:8px auto 0;
+    text-wrap:balance;
+  }
+  .note[hidden]{ display:none }
+  .app[data-phase="rest"] .phase-name{ color:var(--warm) }
+  .app[data-phase="rest"] .instr,
+  .app[data-phase="rest"] .time{ color:#d8cdbb }
+
+  /* ---- centered panels: intro / done ---- */
+  .panel{
+    position:absolute; inset:0; z-index:6;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:0 26px; gap:16px;
+  }
+  .panel[hidden]{ display:none }
+
+  .title{
+    font-family:"Sora", sans-serif; font-weight:300;
+    font-size:clamp(2.1rem, 9vw, 3rem); line-height:1.08; letter-spacing:-.01em;
+    color:var(--ink);
+  }
+  .sub{
+    font-size:clamp(1rem, 4.2vw, 1.15rem); color:var(--ink-dim);
+    line-height:1.5; max-width:30ch; text-wrap:balance;
+  }
+  .hint{
+    font-size:.86rem; color:var(--ink-faint); line-height:1.5;
+    max-width:32ch; text-wrap:balance;
+  }
+
+  /* done screen: sit lower, high contrast, no orb behind the text */
+  .panel.done{ justify-content:flex-end; padding-bottom:16vh; gap:14px }
+  .panel.done .title{ color:#f5f3ed }
+  .panel.done .sub{ color:#e2e3ea }
+  .panel.done .hint{ color:#9aa0b4 }
+
+  .primary{
+    font-family:"Sora", sans-serif; font-weight:400; font-size:1.02rem;
+    letter-spacing:.02em; color:var(--bg);
+    background:var(--accent); border:none; border-radius:100px;
+    padding:15px 46px; cursor:pointer; margin-top:6px;
+    transition:transform .15s var(--ease), background .2s, box-shadow .2s;
+    box-shadow:0 0 0 0 var(--ring);
+  }
+  .primary:hover{ background:var(--accent-soft); box-shadow:0 8px 30px -10px var(--ring) }
+  .primary:active{ transform:translateY(1px) scale(.99) }
+  .primary:focus-visible{ outline:2px solid var(--ring); outline-offset:3px }
+  .primary.wide{ flex:1; padding:15px 20px; margin-top:0 }
+
+  .why{
+    margin-top:6px; max-width:34ch; text-align:left;
+    font-size:.86rem; color:var(--ink-dim);
+  }
+  .why summary{
+    cursor:pointer; color:var(--ink-faint); text-align:center; list-style:none;
+    font-size:.82rem; letter-spacing:.04em; padding:6px; user-select:none;
+  }
+  .why summary::-webkit-details-marker{ display:none }
+  .why summary:hover{ color:var(--ink-dim) }
+  .why[open] summary{ color:var(--ink-dim); margin-bottom:8px }
+  .why p{ line-height:1.55; margin-top:8px }
+
+  /* ---- bottom controls ---- */
+  .controls{
+    display:flex; gap:12px; align-items:center; z-index:5;
+    padding-top:16px;
+  }
+  .controls[hidden]{ display:none }
+  .ghost{
+    font-family:"Hanken Grotesk", sans-serif; font-weight:500; font-size:.94rem;
+    color:var(--ink-dim); background:transparent;
+    border:1px solid rgba(255,255,255,.14); border-radius:100px;
+    padding:15px 22px; cursor:pointer;
+    transition:color .2s, border-color .2s;
+  }
+  .ghost:hover{ color:var(--ink); border-color:rgba(255,255,255,.28) }
+  .ghost:focus-visible{ outline:2px solid var(--ring); outline-offset:2px }
+
+  /* ---- phase dots ---- */
+  .dots{
+    display:flex; gap:8px; justify-content:center; margin-top:14px; z-index:5;
+    min-height:6px;
+  }
+  .dots[hidden]{ display:none }
+  .dot{
+    width:6px; height:6px; border-radius:50%;
+    background:rgba(255,255,255,.14); transition:background .4s, transform .4s;
+  }
+  .dot.active{ background:var(--accent); transform:scale(1.4) }
+  .dot.past{ background:var(--accent-deep) }
+
+  /* ---- confetti (sits behind the done text so it stays readable) ---- */
+  #confetti{ position:fixed; inset:0; width:100%; height:100%; z-index:3; pointer-events:none }
+
+  @media (prefers-reduced-motion: reduce){
+    .app *{ animation:none !important }
+    .orb, .orb-wrap{ transition:opacity .4s ease, transform .4s ease }
+    .app[data-state="running"][data-phase="blink"]    .orb{ opacity:.85 }
+    .app[data-state="running"][data-phase="distance"] .orb{ transform:scale(.34); opacity:.5 }
+    .app[data-state="running"][data-phase="nearfar"]  .orb{ transform:scale(.8) }
+    .app[data-state="running"][data-phase="movement"] .orb{ transform:scale(.34) }
+  }
+</style>
+</head>
+<body>
+  <div class="app" id="app" data-state="idle" data-phase="idle">
+
+    <header class="top">
+      <div class="brand">Eye&nbsp;Reset</div>
+      <button class="icon-btn" id="soundBtn" aria-pressed="true" aria-label="Mute sound">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" stroke="none"/>
+          <path d="M16 9a4 4 0 0 1 0 6"/>
+          <path d="M18.5 6.5a7.5 7.5 0 0 1 0 11"/>
+          <line class="slash" x1="3" y1="3" x2="21" y2="21" stroke-width="1.8"/>
+        </svg>
+      </button>
+    </header>
+
+    <div class="track" aria-hidden="true"><div class="track-fill" id="trackFill"></div></div>
+
+    <main class="stage" id="stage">
+      <div class="orb-wrap" id="orbWrap">
+        <div class="glow"></div>
+        <div class="orb" id="orb"></div>
+      </div>
+
+      <div class="run-top">
+        <div class="phase-name" id="phaseName">Get ready</div>
+        <div class="time" id="time">5</div>
+      </div>
+      <div class="run-bottom">
+        <p class="instr" id="instr" aria-live="polite">Sit tall. Relax your shoulders.</p>
+        <p class="note" id="noteEl" hidden></p>
+      </div>
+
+      <section class="panel intro" id="introPanel">
+        <h1 class="title">Two-minute<br>eye reset</h1>
+        <p class="sub">A short routine to ease tired eyes after screen time. Blinking, distance focus, and a moment of rest.</p>
+        <button class="primary" id="beginBtn">Begin</button>
+        <p class="hint">Sound on, please. The voice guides you so you can look away from the screen. Sit where you can see across the room.</p>
+        <details class="why">
+          <summary>What this actually does</summary>
+          <p>Screens make you blink less and hold your focus close for too long. That's what leaves eyes dry, aching, and slow to refocus. This routine reverses it: full blinks to rewet the eyes, looking far to relax the focusing muscle, and rest.</p>
+          <p>It won't sharpen your eyesight or change your prescription. That's a myth about eye exercises. What it reliably does is relieve screen strain.</p>
+          <p>Between sessions, the standard tip: every 20 minutes, look about 20&nbsp;feet away for 20&nbsp;seconds.</p>
+        </details>
+      </section>
+
+      <section class="panel done" id="donePanel" hidden>
+        <h2 class="title">Eyes reset.</h2>
+        <p class="sub">Do this whenever your eyes feel tired. A few times through the day is plenty.</p>
+        <p class="hint">Between sessions: every 20&nbsp;min, look ~20&nbsp;ft away for 20&nbsp;sec.</p>
+        <button class="primary" id="againBtn">Again</button>
+      </section>
+    </main>
+
+    <footer class="controls" id="controls" hidden>
+      <button class="ghost" id="restartBtn" aria-label="Restart routine">Restart</button>
+      <button class="primary wide" id="pauseBtn" aria-label="Pause">Pause</button>
+    </footer>
+
+    <div class="dots" id="dots" hidden aria-hidden="true"></div>
+
+    <canvas id="confetti" aria-hidden="true"></canvas>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+
+  const ROUTINE = [
+    { id:"ready",    name:"Get ready", secs:5,
+      instr:"Sit tall. Relax your shoulders.",
+      say:"Let's reset your eyes. Sit tall, relax your shoulders, and settle in." },
+    { id:"blink",    name:"Blink", secs:15,
+      instr:"Blink slowly and fully. Close all the way, open all the way.",
+      say:"Blink slowly and completely. Fully close, then fully open. Keep a gentle rhythm." },
+    { id:"distance", name:"Look far", secs:30,
+      instr:"Look away from the screen. Find the farthest point you can and let your focus relax. Keep blinking naturally.",
+      note:"(~5 to 8 blinks, gaze soft, let focus drift without straining)",
+      say:"Now look away from the screen. Find the farthest point you can, out a window or across the room, and let your focus relax there. Keep blinking naturally, don't hold a stare." },
+    { id:"nearfar",  name:"Near & far", secs:25,
+      instr:"Focus on your thumb up close, then something far. Keep switching.",
+      say:"Hold a thumb up close. Focus on it. Now shift to something far away. And back to your thumb. Keep gently switching." },
+    { id:"movement", name:"Follow", secs:20,
+      instr:"Follow the light with your eyes. Head still.",
+      say:"Follow the light with your eyes only, all the way to the edges. Keep your head still." },
+    { id:"rest",     name:"Rest", secs:25,
+      instr:"Rub your palms together, then cover your eyes. No pressure. Rest and breathe.",
+      say:"Last one. Rub your palms together for a few seconds to warm them, then cup them gently over your closed eyes. No pressure. Rest in the dark and breathe slowly." },
+  ];
+  const TOTAL = ROUTINE.reduce((s,p)=>s+p.secs, 0);
+  const cumStart = [];
+  ROUTINE.reduce((a,p,i)=>{ cumStart[i]=a; return a+p.secs; }, 0);
+
+  const app       = document.getElementById("app");
+  const trackFill = document.getElementById("trackFill");
+  const phaseName = document.getElementById("phaseName");
+  const timeEl    = document.getElementById("time");
+  const instrEl   = document.getElementById("instr");
+  const noteEl    = document.getElementById("noteEl");
+  const introPanel= document.getElementById("introPanel");
+  const donePanel = document.getElementById("donePanel");
+  const controls  = document.getElementById("controls");
+  const dotsWrap  = document.getElementById("dots");
+  const beginBtn  = document.getElementById("beginBtn");
+  const againBtn  = document.getElementById("againBtn");
+  const pauseBtn  = document.getElementById("pauseBtn");
+  const restartBtn= document.getElementById("restartBtn");
+  const soundBtn  = document.getElementById("soundBtn");
+  const confettiCanvas = document.getElementById("confetti");
+  const cctx = confettiCanvas.getContext("2d");
+
+  ROUTINE.forEach(()=>{ const d=document.createElement("div"); d.className="dot"; dotsWrap.appendChild(d); });
+  const dots = Array.from(dotsWrap.children);
+
+  // ---- audio ----
+  let muted = false;
+  let audioCtx = null;
+  let voice = null;
+  const speechOK = typeof window.speechSynthesis !== "undefined";
+
+  function initAudio(){
+    if(!audioCtx){
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if(AC) audioCtx = new AC();
+    }
+    if(audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+  }
+  function chime(freq, dur){
+    if(muted || !audioCtx) return;
+    dur = dur || 0.85;
+    const t = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.16, t + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(t); osc.stop(t + dur + 0.05);
+  }
+  function pickVoice(){
+    if(!speechOK) return;
+    const vs = window.speechSynthesis.getVoices();
+    if(!vs.length) return;
+    const en = vs.filter(v => /^en(-|_|$)/i.test(v.lang));
+    const pool = en.length ? en : vs;
+    const preferred = pool.find(v => /natural|samantha|siri|google|zira|aria|serena/i.test(v.name));
+    voice = preferred || pool[0];
+  }
+  if(speechOK){
+    pickVoice();
+    window.speechSynthesis.onvoiceschanged = pickVoice;
+  }
+  function say(text){
+    if(muted || !speechOK) return;
+    try{
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      if(voice) u.voice = voice;
+      u.rate = 0.94; u.pitch = 1.0; u.volume = 1.0;
+      window.speechSynthesis.speak(u);
+    }catch(e){}
+  }
+  function stopSpeech(){ if(speechOK){ try{ window.speechSynthesis.cancel(); }catch(e){} } }
+
+  // ---- wake lock ----
+  let wakeLock = null;
+  async function requestWake(){
+    try{ if("wakeLock" in navigator){ wakeLock = await navigator.wakeLock.request("screen"); } }catch(e){}
+  }
+  function releaseWake(){ try{ if(wakeLock){ wakeLock.release(); wakeLock = null; } }catch(e){} }
+  document.addEventListener("visibilitychange", ()=>{
+    if(document.visibilityState === "visible" && state === "running") requestWake();
+  });
+
+  // ---- confetti ----
+  let confettiRAF = null;
+  function stopConfetti(){
+    if(confettiRAF){ cancelAnimationFrame(confettiRAF); confettiRAF = null; }
+    cctx.setTransform(1,0,0,1,0,0);
+    cctx.clearRect(0,0,confettiCanvas.width, confettiCanvas.height);
+  }
+  function confettiBurst(){
+    if(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = window.innerWidth, h = window.innerHeight;
+    confettiCanvas.width = w * dpr;
+    confettiCanvas.height = h * dpr;
+    cctx.setTransform(dpr,0,0,dpr,0,0);
+    const colors = ["#74b9ad","#9ad3c8","#cca672","#eae7de","#6f9bd1","#e0a3b8"];
+    const parts = [];
+    for(let i=0;i<130;i++){
+      parts.push({
+        x: w * (0.15 + Math.random()*0.7),
+        y: -20 - Math.random()*h*0.35,
+        w: 6 + Math.random()*6,
+        h: 8 + Math.random()*8,
+        vx: (Math.random()-0.5)*3,
+        vy: 3 + Math.random()*4,
+        rot: Math.random()*Math.PI,
+        vrot: (Math.random()-0.5)*0.32,
+        color: colors[(Math.random()*colors.length)|0],
+        life: 1
+      });
+    }
+    const start = performance.now();
+    function draw(now){
+      const t = now - start;
+      cctx.clearRect(0,0,w,h);
+      let alive = 0;
+      for(const p of parts){
+        p.vy += 0.06; p.x += p.vx; p.y += p.vy; p.rot += p.vrot;
+        if(t > 1800) p.life -= 0.02;
+        if(p.y < h + 40 && p.life > 0){
+          alive++;
+          cctx.save();
+          cctx.translate(p.x, p.y);
+          cctx.rotate(p.rot);
+          cctx.globalAlpha = Math.max(0, p.life);
+          cctx.fillStyle = p.color;
+          cctx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
+          cctx.restore();
+        }
+      }
+      if(alive > 0 && t < 4200){ confettiRAF = requestAnimationFrame(draw); }
+      else { stopConfetti(); }
+    }
+    confettiRAF = requestAnimationFrame(draw);
+  }
+
+  // ---- engine ----
+  let state = "idle";
+  let startTime = 0;
+  let pausedAt = 0;
+  let pausedAccum = 0;
+  let currentPhase = -1;
+  let rafId = null;
+
+  function setPhase(i){
+    const p = ROUTINE[i];
+    app.dataset.phase = p.id;
+    phaseName.textContent = p.name;
+    instrEl.textContent = p.instr;
+    if(p.note){ noteEl.textContent = p.note; noteEl.hidden = false; }
+    else { noteEl.textContent = ""; noteEl.hidden = true; }
+    dots.forEach((d,idx)=>{
+      d.classList.toggle("active", idx === i);
+      d.classList.toggle("past", idx < i);
+    });
+    chime(i === 0 ? 528 : 440, 0.9);
+    say(p.say);
+  }
+
+  function frame(){
+    if(state !== "running") return;
+    const elapsed = (performance.now() - startTime - pausedAccum) / 1000;
+    if(elapsed >= TOTAL){ finish(); return; }
+
+    trackFill.style.width = Math.min(100, (elapsed/TOTAL)*100) + "%";
+
+    let i = ROUTINE.length - 1;
+    for(let k=0;k<ROUTINE.length;k++){
+      if(elapsed < cumStart[k] + ROUTINE[k].secs){ i = k; break; }
+    }
+    if(i !== currentPhase){ currentPhase = i; setPhase(i); }
+
+    const remain = (cumStart[i] + ROUTINE[i].secs) - elapsed;
+    timeEl.textContent = Math.max(1, Math.ceil(remain));
+    rafId = requestAnimationFrame(frame);
+  }
+
+  function begin(){
+    stopConfetti();
+    initAudio();
+    say("");
+    stopSpeech();
+    requestWake();
+
+    introPanel.hidden = true;
+    donePanel.hidden = true;
+    controls.hidden = false;
+    dotsWrap.hidden = false;
+    pauseBtn.textContent = "Pause";
+    pauseBtn.setAttribute("aria-label","Pause");
+
+    state = "running";
+    app.dataset.state = "running";
+    startTime = performance.now();
+    pausedAccum = 0;
+    currentPhase = -1;
+    frame();
+  }
+
+  function pause(){
+    if(state !== "running") return;
+    state = "paused";
+    app.dataset.state = "paused";
+    pausedAt = performance.now();
+    if(rafId) cancelAnimationFrame(rafId);
+    stopSpeech();
+    releaseWake();
+    pauseBtn.textContent = "Resume";
+    pauseBtn.setAttribute("aria-label","Resume");
+  }
+
+  function resume(){
+    if(state !== "paused") return;
+    pausedAccum += performance.now() - pausedAt;
+    state = "running";
+    app.dataset.state = "running";
+    requestWake();
+    pauseBtn.textContent = "Pause";
+    pauseBtn.setAttribute("aria-label","Pause");
+    if(currentPhase >= 0) say(ROUTINE[currentPhase].instr);
+    frame();
+  }
+
+  function finish(){
+    state = "done";
+    app.dataset.state = "done";
+    app.dataset.phase = "idle";
+    if(rafId) cancelAnimationFrame(rafId);
+    trackFill.style.width = "100%";
+    dots.forEach(d=>{ d.classList.remove("active"); d.classList.add("past"); });
+    releaseWake();
+    chime(660, 1.1);
+    setTimeout(()=>chime(880, 1.2), 180);
+    say("Nicely done. Your eyes are reset.");
+    controls.hidden = true;
+    dotsWrap.hidden = true;
+    donePanel.hidden = false;
+    confettiBurst();
+  }
+
+  // ---- controls ----
+  beginBtn.addEventListener("click", begin);
+  againBtn.addEventListener("click", begin);
+  restartBtn.addEventListener("click", begin);
+  pauseBtn.addEventListener("click", ()=>{ state === "running" ? pause() : resume(); });
+
+  soundBtn.addEventListener("click", ()=>{
+    muted = !muted;
+    soundBtn.classList.toggle("muted", muted);
+    soundBtn.setAttribute("aria-pressed", String(!muted));
+    soundBtn.setAttribute("aria-label", muted ? "Unmute sound" : "Mute sound");
+    if(muted) stopSpeech();
+    else initAudio();
+  });
+})();
+</script>
+</body>
+</html>
