@@ -98,7 +98,8 @@
     transition:opacity 1s var(--ease);
     will-change:transform;
   }
-  .app[data-state="done"] .orb-wrap{ opacity:0 }
+  .app[data-state="done"] .orb-wrap,
+  .app[data-state="done"] .orb{ opacity:0 }
 
   .glow{
     position:absolute; width:var(--orb); aspect-ratio:1; border-radius:50%;
@@ -107,11 +108,10 @@
     transition:opacity 1.2s var(--ease), transform 1s var(--ease);
     pointer-events:none;
   }
-  .app[data-state="idle"] .glow,
-  .app[data-state="paused"] .glow{ opacity:.18 }
-  .app[data-state="running"][data-phase="distance"] .glow{ opacity:.12 }
-  .app[data-state="running"][data-phase="movement"] .glow{ opacity:.28; transform:scale(.5) }
-  .app[data-state="running"][data-phase="rest"] .glow{ opacity:0 }
+  .app[data-state="idle"] .glow{ opacity:.18 }
+  .app[data-phase="distance"] .glow{ opacity:.12 }
+  .app[data-phase="movement"] .glow{ opacity:.28; transform:scale(.5) }
+  .app[data-phase="rest"] .glow{ opacity:0 }
 
   .orb{
     position:absolute;
@@ -123,23 +123,31 @@
     will-change:transform, opacity;
     pointer-events:none;
   }
-  .app[data-state="idle"] .orb,
-  .app[data-state="paused"] .orb{ animation:breathe 7s var(--ease) infinite; opacity:.5 }
+  .app[data-state="idle"] .orb{ animation:breathe 7s var(--ease) infinite; opacity:.5 }
 
-  /* per-phase orb behaviour (running) */
-  .app[data-state="running"][data-phase="ready"]    .orb{ animation:breathe 6s var(--ease) infinite }
-  .app[data-state="running"][data-phase="blink"]    .orb{ animation:blinkpace 3s var(--ease) infinite }
-  .app[data-state="running"][data-phase="distance"] .orb{ animation:recede 30s linear forwards }
-  .app[data-state="running"][data-phase="nearfar"]  .orb{ animation:nearfar 5s var(--ease) infinite }
-  .app[data-state="running"][data-phase="movement"] .orb{ transform:scale(.34) }
-  .app[data-state="running"][data-phase="rest"]     .orb{ opacity:0; transform:scale(.4) }
+  /* per-phase orb behaviour. data-phase is only set while running or paused */
+  .app[data-phase="ready"]    .orb{ animation:breathe 6s var(--ease) infinite }
+  .app[data-phase="distance"] .orb{ animation:recede 30s linear forwards }
+  .app[data-phase="movement"] .orb{ transform:scale(.34) }
+  .app[data-phase="rest"]     .orb{ opacity:0; transform:scale(.4) }
+
+  /* blink and near/far shapes follow the voice cues (data-cue), so sight and sound never drift */
+  .app[data-phase="blink"] .orb{ transition:transform .3s var(--ease), opacity 1s var(--ease) }
+  .app[data-phase="blink"][data-cue="close"]   .orb{ transform:scaleY(.08) }
+  .app[data-phase="blink"][data-cue="squeeze"] .orb{ transform:scale(.86,.04) }
+  .app[data-phase="nearfar"] .orb{ transition:transform .7s var(--ease), opacity 1s var(--ease) }
+  .app[data-phase="nearfar"][data-cue="near"] .orb{ transform:scale(1.18) }
+  .app[data-phase="nearfar"][data-cue="far"]  .orb{ transform:scale(.46) }
 
   /* the follow-the-light path travels near the edges of the stage */
-  .app[data-state="running"][data-phase="movement"] .orb-wrap{ animation:pursuit 20s var(--ease) forwards }
+  .app[data-phase="movement"] .orb-wrap{ animation:pursuit 20s var(--ease) forwards }
+
+  /* paused: freeze in place rather than swapping animations, so resume picks up in sync */
+  .app[data-state="paused"] .orb,
+  .app[data-state="paused"] .orb-wrap{ animation-play-state:paused !important }
+  .app[data-state="paused"] .orb-wrap{ opacity:.45 }
 
   @keyframes breathe{ 0%,100%{transform:scale(.86)} 50%{transform:scale(1.04)} }
-  @keyframes blinkpace{ 0%,42%{transform:scaleY(1)} 50%{transform:scaleY(.05)} 58%,100%{transform:scaleY(1)} }
-  @keyframes nearfar{ 0%,100%{transform:scale(1.18)} 50%{transform:scale(.46)} }
   @keyframes recede{ 0%{transform:scale(1)} 18%{transform:scale(.34)} 100%{transform:scale(.34)} }
   @keyframes pursuit{
     0%   { transform:translate(0,0) }
@@ -170,6 +178,9 @@
   .app[data-state="running"] .run-bottom,
   .app[data-state="paused"] .run-top,
   .app[data-state="paused"] .run-bottom{ opacity:1 }
+  /* the follow-the-light orb travels through the text band; the voice already gave the instruction */
+  .app[data-state="running"][data-phase="movement"] .run-top,
+  .app[data-state="running"][data-phase="movement"] .run-bottom{ opacity:.3 }
 
   .phase-name{
     font-family:"Sora", sans-serif; font-weight:400;
@@ -184,7 +195,7 @@
   }
   .instr{
     font-size:clamp(1.02rem, 4.4vw, 1.28rem); font-weight:400; line-height:1.45;
-    color:var(--ink); max-width:22ch; margin:0 auto;
+    color:var(--ink); max-width:28ch; margin:0 auto;
     text-wrap:balance;
   }
   .note{
@@ -204,6 +215,10 @@
     text-align:center; padding:0 26px; gap:16px;
   }
   .panel[hidden]{ display:none }
+  /* intro can outgrow short screens (or when "What this actually does" is open): scroll, don't clip */
+  .panel.intro{ justify-content:flex-start; overflow-y:auto; overscroll-behavior:contain; padding-top:8px; padding-bottom:8px }
+  .panel.intro > :first-child{ margin-top:auto }
+  .panel.intro > :last-child{ margin-bottom:auto }
 
   .title{
     font-family:"Sora", sans-serif; font-weight:300;
@@ -283,13 +298,28 @@
   /* ---- confetti (sits behind the done text so it stays readable) ---- */
   #confetti{ position:fixed; inset:0; width:100%; height:100%; z-index:3; pointer-events:none }
 
+  /* short screens (landscape phones): smaller orb and type */
+  @media (max-height:520px){
+    :root{ --orb:clamp(72px, 26vmin, 130px) }
+    .track{ margin-top:8px }
+    .time{ font-size:2.1rem }
+    .title{ font-size:1.8rem }
+    .note{ display:none }
+    .controls{ padding-top:8px }
+    .primary, .ghost{ padding-top:11px; padding-bottom:11px }
+    .dots{ margin-top:8px }
+    .panel.done{ padding-bottom:5vh }
+  }
+  /* short and wide: timer left, instruction right, orb keeps the middle */
+  @media (max-height:520px) and (min-aspect-ratio:4/3){
+    .run-top{ top:50%; left:0; right:auto; width:26%; transform:translateY(-50%) }
+    .run-bottom{ top:50%; bottom:auto; left:auto; right:0; width:32%; padding:0; transform:translateY(-50%) }
+  }
+
   @media (prefers-reduced-motion: reduce){
     .app *{ animation:none !important }
     .orb, .orb-wrap{ transition:opacity .4s ease, transform .4s ease }
-    .app[data-state="running"][data-phase="blink"]    .orb{ opacity:.85 }
-    .app[data-state="running"][data-phase="distance"] .orb{ transform:scale(.34); opacity:.5 }
-    .app[data-state="running"][data-phase="nearfar"]  .orb{ transform:scale(.8) }
-    .app[data-state="running"][data-phase="movement"] .orb{ transform:scale(.34) }
+    .app[data-phase="distance"] .orb{ transform:scale(.34); opacity:.5 }
   }
 </style>
 </head>
@@ -329,10 +359,10 @@
         <h1 class="title">Two-minute<br>eye reset</h1>
         <p class="sub">A short routine to ease tired eyes after screen time. Blinking, distance focus, and a moment of rest.</p>
         <button class="primary" id="beginBtn">Begin</button>
-        <p class="hint">Sound on, please. The voice guides you so you can look away from the screen. Sit where you can see across the room.</p>
+        <p class="hint">Sound on, please (on iPhone, Silent Mode off). Keep this page open; the voice guides you so you can look away. Sit where you can see across the room.</p>
         <details class="why">
           <summary>What this actually does</summary>
-          <p>Screens make you blink less and hold your focus close for too long. That's what leaves eyes dry, aching, and slow to refocus. This routine reverses it: full blinks to rewet the eyes, looking far to relax the focusing muscle, and rest.</p>
+          <p>Screens make you blink less and hold your focus close for too long. That's what leaves eyes dry, aching, and slow to refocus. This routine reverses it: full blinks with a gentle squeeze to rewet the eyes, looking far to relax the focusing muscle, and rest.</p>
           <p>It won't sharpen your eyesight or change your prescription. That's a myth about eye exercises. What it reliably does is relieve screen strain.</p>
           <p>Between sessions, the standard tip: every 20 minutes, look about 20&nbsp;feet away for 20&nbsp;seconds.</p>
         </details>
@@ -360,26 +390,36 @@
 (function(){
   "use strict";
 
+  // cues: [secondsIntoPhase, spoken line, optional orb state (data-cue)].
+  // Each line must finish before the next cue or phase end, assuming a slow voice:
+  // words / 2.3 + 1 s start latency + 0.35 s per sentence break.
   const ROUTINE = [
     { id:"ready",    name:"Get ready", secs:5,
       instr:"Sit tall. Relax your shoulders.",
-      say:"Let's reset your eyes. Sit tall, relax your shoulders, and settle in." },
-    { id:"blink",    name:"Blink", secs:15,
-      instr:"Blink slowly and fully. Close all the way, open all the way.",
-      say:"Blink slowly and completely. Fully close, then fully open. Keep a gentle rhythm." },
+      cues:[[0, "Sit tall and drop your shoulders."]] },
+    { id:"blink",    name:"Blink", secs:18,
+      instr:"Close, squeeze gently, open. Follow the voice.",
+      cues:[[0,    "Close your eyes.", "close"], [2.5,  "Squeeze.", "squeeze"], [4.5,  "Open.", "open"],
+            [6.5,  "Close.", "close"],           [8.5,  "Squeeze.", "squeeze"], [10.5, "Open.", "open"],
+            [12.5, "Close.", "close"],           [14.5, "Squeeze.", "squeeze"], [16.5, "Open.", "open"]] },
     { id:"distance", name:"Look far", secs:30,
-      instr:"Look away from the screen. Find the farthest point you can and let your focus relax. Keep blinking naturally.",
-      note:"(~5 to 8 blinks, gaze soft, let focus drift without straining)",
-      say:"Now look away from the screen. Find the farthest point you can, out a window or across the room, and let your focus relax there. Keep blinking naturally, don't hold a stare." },
-    { id:"nearfar",  name:"Near & far", secs:25,
-      instr:"Focus on your thumb up close, then something far. Keep switching.",
-      say:"Hold a thumb up close. Focus on it. Now shift to something far away. And back to your thumb. Keep gently switching." },
+      instr:"Look away. Find the farthest point you can and let your focus relax.",
+      note:"(~5 to 8 blinks, gaze soft, no straining)",
+      cues:[[0,  "Look away from the screen, at the farthest point you can see."],
+            [8,  "Let your focus soften. Keep blinking."],
+            [20, "Stay far. Ten more seconds."]] },
+    { id:"nearfar",  name:"Near & far", secs:24,
+      instr:"Thumb up close, then something far. Switch when the voice says.",
+      cues:[[0, "Hold up your thumb. Focus on it.", "near"],
+            [5, "Far.", "far"], [9, "Near.", "near"], [13, "Far.", "far"], [17, "Near.", "near"], [21, "Far.", "far"]] },
     { id:"movement", name:"Follow", secs:20,
       instr:"Follow the light with your eyes. Head still.",
-      say:"Follow the light with your eyes only, all the way to the edges. Keep your head still." },
-    { id:"rest",     name:"Rest", secs:25,
-      instr:"Rub your palms together, then cover your eyes. No pressure. Rest and breathe.",
-      say:"Last one. Rub your palms together for a few seconds to warm them, then cup them gently over your closed eyes. No pressure. Rest in the dark and breathe slowly." },
+      cues:[[0, "Follow the light with your eyes. Keep your head still."]] },
+    { id:"rest",     name:"Rest", secs:23,
+      instr:"Warm your palms, then cup them over closed eyes. No pressure. Breathe.",
+      cues:[[0,  "Rub your palms together to warm them."],
+            [5,  "Now cup them over your closed eyes. No pressure. Breathe slowly."],
+            [17, "Lower your hands. Open your eyes."]] },
   ];
   const TOTAL = ROUTINE.reduce((s,p)=>s+p.secs, 0);
   const cumStart = [];
@@ -410,14 +450,28 @@
   let muted = false;
   let audioCtx = null;
   let voice = null;
-  const speechOK = typeof window.speechSynthesis !== "undefined";
+  const synth = window.speechSynthesis;
+  const speechOK = !!synth && typeof window.SpeechSynthesisUtterance !== "undefined";
 
   function initAudio(){
-    if(!audioCtx){
-      const AC = window.AudioContext || window.webkitAudioContext;
-      if(AC) audioCtx = new AC();
-    }
-    if(audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+    try{
+      if(!audioCtx || audioCtx.state === "closed"){
+        const AC = window.AudioContext || window.webkitAudioContext;
+        audioCtx = AC ? new AC() : null;
+      }
+      // covers "suspended" and iOS's "interrupted" (after a call, lock, or app switch)
+      if(audioCtx && audioCtx.state !== "running"){
+        const p = audioCtx.resume();
+        if(p && p.catch) p.catch(()=>{});
+      }
+    }catch(e){}
+  }
+  // iOS: "playback" lets sound through with the Silent switch on (feature-detected; may pause other audio)
+  function setAudioSession(type){
+    try{ if(navigator.audioSession) navigator.audioSession.type = type; }catch(e){}
+  }
+  function buzz(pattern){
+    try{ if(navigator.vibrate) navigator.vibrate(pattern); }catch(e){}
   }
   function chime(freq, dur){
     if(muted || !audioCtx) return;
@@ -433,30 +487,72 @@
     osc.connect(gain).connect(audioCtx.destination);
     osc.start(t); osc.stop(t + dur + 0.05);
   }
+  // Apple novelty voices (Eloquence ones are caught by voiceURI below)
+  const NOVELTY = /^(albert|bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox)\b/i;
+  const normLang = l => String(l || "").replace("_", "-").toLowerCase();
+
   function pickVoice(){
     if(!speechOK) return;
-    const vs = window.speechSynthesis.getVoices();
+    const vs = synth.getVoices();
     if(!vs.length) return;
-    const en = vs.filter(v => /^en(-|_|$)/i.test(v.lang));
-    const pool = en.length ? en : vs;
-    const preferred = pool.find(v => /natural|samantha|siri|google|zira|aria|serena/i.test(v.name));
-    voice = preferred || pool[0];
+    const usable = vs.filter(v => !NOVELTY.test(v.name) && !/eloquence/i.test(v.voiceURI || ""));
+    const en = usable.filter(v => /^en(-|$)/.test(normLang(v.lang)));
+    const pool = en.length ? en : (usable.length ? usable : vs);
+    const want = (normLang(navigator.language).match(/^[a-z]{2,3}-[a-z]{2}/) || [""])[0];  // "en-us" from "en-US@posix" etc.
+    const score = v =>
+      (want && normLang(v.lang) === want ? 8 : 0) +
+      (/premium|enhanced|natural/i.test(v.name + " " + (v.voiceURI || "")) ? 4 : 0) +
+      (/samantha|siri|google|zira|aria|serena/i.test(v.name) ? 2 : 0) +
+      (v.localService ? 1 : 0);
+    voice = pool.reduce((best, v) => score(v) > score(best) ? v : best, pool[0]);
   }
   if(speechOK){
     pickVoice();
-    window.speechSynthesis.onvoiceschanged = pickVoice;
+    synth.onvoiceschanged = pickVoice;
+  }
+
+  // Speech is queued, never cancel-then-speak in the same tick (that drops utterances on
+  // Safari and Chrome). A cancel only happens on pause/mute/restart, or to clear a stale backlog,
+  // and the next utterance waits a moment after it.
+  const CANCEL_GAP_MS = 60;
+  const liveUtterances = new Set();   // hold refs so engines don't garbage-collect them mid-speech
+  let speakTimer = null;
+  let cancelledAt = -Infinity;
+
+  function cancelSpeech(){
+    try{ synth.cancel(); }catch(e){}
+    cancelledAt = performance.now();
+    liveUtterances.clear();
+  }
+  function speakNow(text){
+    const u = new SpeechSynthesisUtterance(text);
+    if(voice){ u.voice = voice; u.lang = String(voice.lang || "").replace("_", "-"); }
+    u.rate = 0.94; u.pitch = 1.0; u.volume = 1.0;
+    u.onend = u.onerror = () => liveUtterances.delete(u);
+    liveUtterances.add(u);
+    synth.speak(u);
   }
   function say(text){
-    if(muted || !speechOK) return;
+    if(muted || !speechOK || !text) return;
     try{
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      if(voice) u.voice = voice;
-      u.rate = 0.94; u.pitch = 1.0; u.volume = 1.0;
-      window.speechSynthesis.speak(u);
+      clearTimeout(speakTimer); speakTimer = null;
+      if(synth.pending) cancelSpeech();   // a backlog means we're behind: the newest line wins
+      const wait = CANCEL_GAP_MS - (performance.now() - cancelledAt);
+      if(wait > 0){
+        speakTimer = setTimeout(()=>{
+          speakTimer = null;
+          if(!muted){ try{ speakNow(text); }catch(e){} }
+        }, wait);
+      } else {
+        speakNow(text);
+      }
     }catch(e){}
   }
-  function stopSpeech(){ if(speechOK){ try{ window.speechSynthesis.cancel(); }catch(e){} } }
+  function stopSpeech(){
+    clearTimeout(speakTimer); speakTimer = null;
+    if(!speechOK) return;
+    if(synth.speaking || synth.pending) cancelSpeech();
+  }
 
   // ---- wake lock ----
   let wakeLock = null;
@@ -464,9 +560,12 @@
     try{ if("wakeLock" in navigator){ wakeLock = await navigator.wakeLock.request("screen"); } }catch(e){}
   }
   function releaseWake(){ try{ if(wakeLock){ wakeLock.release(); wakeLock = null; } }catch(e){} }
+  // Screen lock or app switch stops the frame loop, so pause instead of silently skipping phases.
   document.addEventListener("visibilitychange", ()=>{
-    if(document.visibilityState === "visible" && state === "running") requestWake();
+    if(document.visibilityState === "hidden"){ if(state === "running") pause(); }
+    else if(state === "running") requestWake();
   });
+  window.addEventListener("pagehide", ()=>{ if(state === "running") pause(); });
 
   // ---- confetti ----
   let confettiRAF = null;
@@ -529,10 +628,20 @@
   let pausedAt = 0;
   let pausedAccum = 0;
   let currentPhase = -1;
+  let cueIdx = 0;          // next cue to fire in the current phase
+  let lastCue = null;      // most recent cue fired (re-spoken on resume if there's room)
   let rafId = null;
+  let lastFrame = 0;
+  const FRAME_GAP_MS = 1500;   // a longer gap means we were frozen (lock, app switch) without being told
+
+  function elapsedSecs(now){ return (now - startTime - pausedAccum) / 1000; }
 
   function setPhase(i){
     const p = ROUTINE[i];
+    currentPhase = i;
+    cueIdx = 0;
+    lastCue = null;
+    delete app.dataset.cue;
     app.dataset.phase = p.id;
     phaseName.textContent = p.name;
     instrEl.textContent = p.instr;
@@ -543,12 +652,32 @@
       d.classList.toggle("past", idx < i);
     });
     chime(i === 0 ? 528 : 440, 0.9);
-    say(p.say);
+    buzz(50);
+  }
+
+  // Fire every cue that is due. If several are due at once (a stalled frame), only the latest
+  // is spoken so the speech queue never fills with stale lines.
+  function fireDueCues(phaseElapsed){
+    const cues = ROUTINE[currentPhase].cues;
+    let due = null, visual = null;
+    while(cueIdx < cues.length && cues[cueIdx][0] <= phaseElapsed){
+      due = cues[cueIdx];
+      if(due[2]) visual = due[2];
+      cueIdx++;
+    }
+    if(!due) return;
+    lastCue = due;
+    if(visual) app.dataset.cue = visual;
+    say(due[1]);
   }
 
   function frame(){
     if(state !== "running") return;
-    const elapsed = (performance.now() - startTime - pausedAccum) / 1000;
+    const now = performance.now();
+    if(lastFrame && now - lastFrame > FRAME_GAP_MS){ pause(lastFrame); return; }
+    lastFrame = now;
+
+    const elapsed = elapsedSecs(now);
     if(elapsed >= TOTAL){ finish(); return; }
 
     trackFill.style.width = Math.min(100, (elapsed/TOTAL)*100) + "%";
@@ -557,7 +686,8 @@
     for(let k=0;k<ROUTINE.length;k++){
       if(elapsed < cumStart[k] + ROUTINE[k].secs){ i = k; break; }
     }
-    if(i !== currentPhase){ currentPhase = i; setPhase(i); }
+    if(i !== currentPhase) setPhase(i);
+    fireDueCues(elapsed - cumStart[i]);   // on the first frame this runs inside the Begin tap (iOS speech unlock)
 
     const remain = (cumStart[i] + ROUTINE[i].secs) - elapsed;
     timeEl.textContent = Math.max(1, Math.ceil(remain));
@@ -566,10 +696,12 @@
 
   function begin(){
     stopConfetti();
-    initAudio();
-    say("");
     stopSpeech();
+    setAudioSession("playback");
+    initAudio();
+    if(!voice) pickVoice();
     requestWake();
+    if(rafId){ cancelAnimationFrame(rafId); rafId = null; }
 
     introPanel.hidden = true;
     donePanel.hidden = true;
@@ -578,35 +710,56 @@
     pauseBtn.textContent = "Pause";
     pauseBtn.setAttribute("aria-label","Pause");
 
+    // reset phase styling first so a restart replays the CSS animations from the top
+    app.dataset.phase = "idle";
+    delete app.dataset.cue;
+    void app.offsetWidth;
+
     state = "running";
     app.dataset.state = "running";
     startTime = performance.now();
     pausedAccum = 0;
     currentPhase = -1;
+    lastCue = null;
+    lastFrame = 0;
     frame();
   }
 
-  function pause(){
+  // `at` lets the frame-gap guard backdate the pause so the frozen gap doesn't count as elapsed
+  function pause(at){
     if(state !== "running") return;
     state = "paused";
     app.dataset.state = "paused";
-    pausedAt = performance.now();
-    if(rafId) cancelAnimationFrame(rafId);
+    pausedAt = typeof at === "number" ? at : performance.now();
+    if(rafId){ cancelAnimationFrame(rafId); rafId = null; }
     stopSpeech();
     releaseWake();
+    phaseName.textContent = "Paused";
     pauseBtn.textContent = "Resume";
     pauseBtn.setAttribute("aria-label","Resume");
   }
 
   function resume(){
     if(state !== "paused") return;
-    pausedAccum += performance.now() - pausedAt;
+    setAudioSession("playback");
+    initAudio();
+    if(speechOK){ try{ synth.resume(); }catch(e){} }
+    const now = performance.now();
+    pausedAccum += now - pausedAt;
     state = "running";
     app.dataset.state = "running";
+    lastFrame = 0;
     requestWake();
     pauseBtn.textContent = "Pause";
     pauseBtn.setAttribute("aria-label","Pause");
-    if(currentPhase >= 0) say(ROUTINE[currentPhase].instr);
+    if(currentPhase >= 0){
+      const p = ROUTINE[currentPhase];
+      phaseName.textContent = p.name;
+      // repeat the last line only if it won't collide with the next one
+      const phaseElapsed = elapsedSecs(now) - cumStart[currentPhase];
+      const next = cueIdx < p.cues.length ? p.cues[cueIdx][0] : p.secs;
+      if(lastCue && next - phaseElapsed >= 2.5) say(lastCue[1]);
+    }
     frame();
   }
 
@@ -614,13 +767,16 @@
     state = "done";
     app.dataset.state = "done";
     app.dataset.phase = "idle";
-    if(rafId) cancelAnimationFrame(rafId);
+    delete app.dataset.cue;
+    if(rafId){ cancelAnimationFrame(rafId); rafId = null; }
     trackFill.style.width = "100%";
     dots.forEach(d=>{ d.classList.remove("active"); d.classList.add("past"); });
     releaseWake();
     chime(660, 1.1);
     setTimeout(()=>chime(880, 1.2), 180);
-    say("Nicely done. Your eyes are reset.");
+    buzz([40, 60, 40]);
+    say("Nicely done. Your eyes are reset.");   // queued behind the rest exit line, not cutting it off
+    setTimeout(()=>{ if(state === "done") setAudioSession("auto"); }, 5000);
     controls.hidden = true;
     dotsWrap.hidden = true;
     donePanel.hidden = false;
